@@ -1,4 +1,4 @@
-pub mod fe_std;
+pub mod std;
 pub mod prelude;
 mod utils;
 

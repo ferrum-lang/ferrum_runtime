@@ -14,29 +14,29 @@ pub fn phantom() -> PhantomData<()> {
     return PhantomData;
 }
 
-pub struct FeBox<T: std::fmt::Debug> {
-    inner: FeBoxInner<T>,
+pub struct FeShared<T: std::fmt::Debug> {
+    inner: FeSharedInner<T>,
 }
 
-enum FeBoxInner<T> {
+enum FeSharedInner<T> {
     Unique(T),
     Shared(Rc<UnsafeCell<T>>),
 }
 
-impl<T: std::fmt::Debug> std::fmt::Debug for FeBox<T> {
+impl<T: std::fmt::Debug> std::fmt::Debug for FeShared<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let count = self.count();
         let value = self.get();
 
         return if count == 1 {
-            write!(f, "@unique({:?})", value)
+            write!(f, "@unique({:#?})", value)
         } else {
-            write!(f, "@shared({:?})", value)
+            write!(f, "@shared({:#?})", value)
         };
     }
 }
 
-impl<T> std::fmt::Display for FeBox<T>
+impl<T> std::fmt::Display for FeShared<T>
 where
     T: std::fmt::Display + std::fmt::Debug,
 {
@@ -45,10 +45,19 @@ where
     }
 }
 
-impl<T: std::fmt::Debug> FeBox<T> {
+impl<T> std::clone::Clone for FeShared<T>
+where
+    T: std::clone::Clone + std::fmt::Debug,
+{
+    fn clone(&self) -> Self {
+        return FeShared::new(self.get().clone());
+    }
+}
+
+impl<T: std::fmt::Debug> FeShared<T> {
     pub fn new(value: T) -> Self {
         return Self {
-            inner: FeBoxInner::Unique(value),
+            inner: FeSharedInner::Unique(value),
         };
     }
 
@@ -58,22 +67,22 @@ impl<T: std::fmt::Debug> FeBox<T> {
 
     pub fn get(&self) -> &T {
         return match &self.inner {
-            FeBoxInner::Unique(value) => value,
-            FeBoxInner::Shared(cell) => unsafe { &*(cell.get() as *const T) },
+            FeSharedInner::Unique(value) => value,
+            FeSharedInner::Shared(cell) => unsafe { &*(cell.get() as *const T) },
         };
     }
 
     pub fn get_mut(&mut self) -> &mut T {
         return match &mut self.inner {
-            FeBoxInner::Unique(value) => value,
-            FeBoxInner::Shared(cell) => unsafe { &mut *(cell.get()) },
+            FeSharedInner::Unique(value) => value,
+            FeSharedInner::Shared(cell) => unsafe { &mut *(cell.get()) },
         };
     }
 
     pub fn take(self) -> Result<T, Self> {
         return match self.inner {
-            FeBoxInner::Unique(value) => Ok(value),
-            FeBoxInner::Shared(cell) => match Rc::strong_count(&cell) {
+            FeSharedInner::Unique(value) => Ok(value),
+            FeSharedInner::Shared(cell) => match Rc::strong_count(&cell) {
                 0 => unreachable!("Rc count cannot be 0"),
                 1 => {
                     let ptr: *const UnsafeCell<T> = Rc::into_raw(cell);
@@ -81,7 +90,7 @@ impl<T: std::fmt::Debug> FeBox<T> {
                     Ok(unsafe { ptr::read(&*cell.get()) })
                 }
                 _ => Err(Self {
-                    inner: FeBoxInner::Shared(cell),
+                    inner: FeSharedInner::Shared(cell),
                 }),
             },
         };
@@ -89,8 +98,8 @@ impl<T: std::fmt::Debug> FeBox<T> {
 
     pub fn drop(self) {
         return match self.inner {
-            FeBoxInner::Unique(_) => {}
-            FeBoxInner::Shared(cell) => match Rc::strong_count(&cell) {
+            FeSharedInner::Unique(_) => {}
+            FeSharedInner::Shared(cell) => match Rc::strong_count(&cell) {
                 0 => unreachable!("Rc count cannot be 0"),
                 1 => {
                     let ptr: *const UnsafeCell<T> = Rc::into_raw(cell);
@@ -104,15 +113,15 @@ impl<T: std::fmt::Debug> FeBox<T> {
 
     pub fn count(&self) -> usize {
         return match &self.inner {
-            FeBoxInner::Unique(_) => 1,
-            FeBoxInner::Shared(cell) => {
+            FeSharedInner::Unique(_) => 1,
+            FeSharedInner::Shared(cell) => {
                 let count = Rc::strong_count(&cell);
 
                 if count == 1 {
                     unsafe {
                         let cell: &T = self.get();
                         let val: T = ptr::read(cell);
-                        let new: FeBoxInner<T> = FeBoxInner::Unique(val);
+                        let new: FeSharedInner<T> = FeSharedInner::Unique(val);
 
                         utils::mem::write_to_immut(&self.inner, new);
                     }
@@ -124,14 +133,14 @@ impl<T: std::fmt::Debug> FeBox<T> {
     }
 
     pub fn share(&self) -> Self {
-        if let FeBoxInner::Unique(_) = self.inner {
+        if let FeSharedInner::Unique(_) = self.inner {
             unsafe {
-                let curr: FeBoxInner<T> = ptr::read(&self.inner);
+                let curr: FeSharedInner<T> = ptr::read(&self.inner);
 
                 // Must not panic before we get to `ptr::write`
                 let new = match curr {
-                    FeBoxInner::Unique(val) => FeBoxInner::Shared(Rc::new(UnsafeCell::new(val))),
-                    FeBoxInner::Shared(rc) => FeBoxInner::Shared(rc),
+                    FeSharedInner::Unique(val) => FeSharedInner::Shared(Rc::new(UnsafeCell::new(val))),
+                    FeSharedInner::Shared(rc) => FeSharedInner::Shared(rc),
                 };
 
                 utils::mem::write_to_immut(&self.inner, new);
@@ -139,17 +148,17 @@ impl<T: std::fmt::Debug> FeBox<T> {
         }
 
         let rc = match &self.inner {
-            FeBoxInner::Shared(rc) => rc,
+            FeSharedInner::Shared(rc) => rc,
             _ => unreachable!(),
         };
 
         return Self {
-            inner: FeBoxInner::Shared(Rc::clone(&rc)),
+            inner: FeSharedInner::Shared(Rc::clone(&rc)),
         };
     }
 }
 
-impl<T: std::fmt::Debug> Deref for FeBox<T> {
+impl<T: std::fmt::Debug> Deref for FeShared<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -157,7 +166,7 @@ impl<T: std::fmt::Debug> Deref for FeBox<T> {
     }
 }
 
-impl<T: std::fmt::Debug> DerefMut for FeBox<T> {
+impl<T: std::fmt::Debug> DerefMut for FeShared<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         return self.get_mut();
     }

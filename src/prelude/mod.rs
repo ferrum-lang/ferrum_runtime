@@ -227,6 +227,12 @@ impl From<String> for FeStr {
     }
 }
 
+impl From<FeStr> for String {
+    fn from(fe_str: FeStr) -> Self {
+        return fe_str.to_string();
+    }
+}
+
 impl Deref for FeStr {
     type Target = str;
 

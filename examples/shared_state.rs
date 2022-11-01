@@ -4,12 +4,12 @@ fn main() {
     let name: FeStr = FeStr::from("Adam");
     print(&name);
 
-    let name1: FeBox<FeStr> = FeBox::new(name);
+    let name1: FeShared<FeStr> = FeShared::new(name);
     print(&name1);
 
-    let mut name2: FeBox<FeStr> = FeBox::share(&name1);
+    let mut name2: FeShared<FeStr> = FeShared::share(&name1);
 
-    let mut name3: FeBox<FeStr> = FeBox::share(&name1);
+    let mut name3: FeShared<FeStr> = FeShared::share(&name1);
 
     print(&name1);
 

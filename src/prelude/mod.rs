@@ -6,6 +6,22 @@ use std::rc::Rc;
 
 use super::utils;
 
+pub enum FeOption<T> {
+    Some(T),
+    None,
+}
+pub use FeOption::{Some, None};
+
+impl<T: std::fmt::Display> std::fmt::Display for FeOption<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        if let Some(value) = self {
+            return write!(f, "{}", value);
+        } else {
+            return write!(f, "none");
+        }
+    }
+}
+
 pub fn print(string: impl std::fmt::Display) {
     println!("{string}");
 }
@@ -139,7 +155,9 @@ impl<T: std::fmt::Debug> FeShared<T> {
 
                 // Must not panic before we get to `ptr::write`
                 let new = match curr {
-                    FeSharedInner::Unique(val) => FeSharedInner::Shared(Rc::new(UnsafeCell::new(val))),
+                    FeSharedInner::Unique(val) => {
+                        FeSharedInner::Shared(Rc::new(UnsafeCell::new(val)))
+                    }
                     FeSharedInner::Shared(rc) => FeSharedInner::Shared(rc),
                 };
 
@@ -255,4 +273,5 @@ impl std::fmt::Debug for FeStr {
         return write!(f, "\"{}\"", self);
     }
 }
+
 
